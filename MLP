@@ -1,124 +1,125 @@
 import json
-import os
-import math
-import librosa
 import numpy as np
-from scipy.stats import skew
-from rasta import rastaplp
+import tensorflow.keras as keras
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 
-DATASET_PATH = r"C:\Users\armag\Desktop\old and young"
-JSON_PATH = r"Jsonfiles\small_mfcc_rasta_feature_set_young_old.json"
-
-SAMPLE_RATE = 22050
-TRACK_DURATION = 2  # measured in seconds
-SAMPLES_PER_TRACK = SAMPLE_RATE * TRACK_DURATION
+# path to json file that stores MFCCs and genre labels for each processed segment
+DATA_PATH = r"Jsonfiles\all_mfcc_rasta_feature_set.json"
 
 
-def save_mfcc(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_length=512, num_segments=5):
+def load_data(data_path):
 
 
+    with open(data_path, "r") as fp:
+        data = json.load(fp)
 
-    # dictionary to store mapping, labels, and MFCCs
-    data = {
-        "mapping": [],
-        "labels": [],
-        "mfcc": []
-    }
+    # convert lists to numpy arrays
+    X = np.array(data["mfcc"])
+    y = np.array(data["labels"])
+
+    number_of_elements = []
+    a = 0
+    for i in range(len(data["labels"])):
+        if i == 0:
+            a += 0
+
+    return X, y, data
 
 
-    samples_per_segment = int(SAMPLES_PER_TRACK / num_segments)
-    num_mfcc_vectors_per_segment = math.ceil(samples_per_segment / hop_length)
+def plot_history(history):
 
-    # loop through all genre sub-folder
-    for i, (dirpath, dirnames, filenames) in enumerate(os.walk(dataset_path)):
 
-        # ensure we're processing a genre sub-folder level
-        if dirpath is not dataset_path:
+    fig, axs = plt.subplots(2)
 
-            # save genre label (i.e., sub-folder name) in the mapping
-            semantic_label = dirpath.split("/")[-1]
-            data["mapping"].append(semantic_label)
-            print("\nProcessing: {}".format(semantic_label))
 
-            # process all audio files in genre sub-dir
-            for f in filenames:
-                try:
+    axs[0].plot(history.history["accuracy"], label="train accuracy")
+    axs[0].plot(history.history["val_accuracy"], label="test accuracy")
+    axs[0].set_ylabel("Accuracy")
+    axs[0].legend(loc="lower right")
+    axs[0].set_title("Accuracy eval")
 
-                    # load audio file
-                    file_path = os.path.join(dirpath, f)
-                    signal, sample_rate = librosa.load(file_path, sr=SAMPLE_RATE)
-                    if len(signal) >= 22050:
-                        # process all segments of audio file
-                        for d in range(num_segments):
 
-                            # calculate start and finish sample for current segment
-                            start = samples_per_segment * d
-                            finish = start + samples_per_segment
+    axs[1].plot(history.history["loss"], label="train error")
+    axs[1].plot(history.history["val_loss"], label="test error")
+    axs[1].set_ylabel("Error")
+    axs[1].set_xlabel("Epoch")
+    axs[1].legend(loc="upper right")
+    axs[1].set_title("Error eval")
 
-                            ft1 = librosa.feature.mfcc(signal[start:finish], sample_rate, n_mfcc=num_mfcc, n_fft=n_fft, hop_length=hop_length)
-                            ft2 = librosa.feature.zero_crossing_rate(signal[start:finish])[0]
-                            ft3 = librosa.feature.spectral_rolloff(signal[start:finish])[0]
-                            ft4 = librosa.feature.spectral_centroid(signal[start:finish])[0]
-                            ft5 = librosa.feature.spectral_contrast(signal[start:finish])[0]
-                            ft6 = librosa.feature.spectral_bandwidth(signal[start:finish])[0]
-                            ft7 = rastaplp(signal[start:finish])
-                            ft8 = librosa.feature.delta(ft1, order=1)
-                            ft9 = librosa.feature.delta(ft1, order=2)
+    plt.show()
 
-                            ft1_trunc = np.hstack((np.mean(ft1, axis=1), np.std(ft1, axis=1), skew(ft1, axis=1),
-                                                   np.max(ft1, axis=1), np.median(ft1, axis=1), np.min(ft1, axis=1)))
-                            print(ft1_trunc.shape)
-                            ft2_trunc = np.hstack(
-                                (np.mean(ft2), np.std(ft2), skew(ft2), np.max(ft2), np.median(ft2), np.min(ft2)))
-                            print(ft2_trunc.shape)
-                            ft3_trunc = np.hstack(
-                                (np.mean(ft3), np.std(ft3), skew(ft3), np.max(ft3), np.median(ft3), np.min(ft3)))
-                            print(ft3_trunc.shape)
-                            ft4_trunc = np.hstack(
-                                (np.mean(ft4), np.std(ft4), skew(ft4), np.max(ft4), np.median(ft4), np.min(ft4)))
-                            print(ft4_trunc.shape)
+def processing_data(X, y, data):
 
-                            ft5_trunc = np.hstack(
-                                (np.mean(ft5), np.std(ft5), skew(ft5), np.max(ft5), np.median(ft5), np.min(ft5)))
-                            print(ft5_trunc.shape)
+    train_data = pd.DataFrame(data["mfcc"])
+    train_data["label"] = data["labels"]
 
-                            ft6_trunc = np.hstack(
-                                (np.mean(ft6), np.std(ft6), skew(ft6), np.max(ft6), np.median(ft6), np.max(ft6)))
+    X = train_data.drop(["label"], axis=1)
+    X = X.values
 
-                            print(ft6_trunc.shape)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    pca = PCA(n_components=85).fit(X_scaled)
 
-                            ft7_trunc = np.hstack((np.mean(ft7, axis=1), np.std(ft7, axis=1), skew(ft7, axis=1),
-                                                   np.max(ft7, axis=1), np.median(ft7, axis=1), np.min(ft7, axis=1)))
+    X_pca = pca.transform(X_scaled)
 
-                            print(ft7_trunc.shape)
-                            ft8_trunc = np.hstack((np.mean(ft8, axis=1), np.std(ft8, axis=1), skew(ft8, axis=1),
-                                                   np.max(ft8, axis=1), np.median(ft8, axis=1), np.min(ft8, axis=1)))
-                            print(ft8_trunc.shape)
-                            ft9_trunc = np.hstack((np.mean(ft9, axis=1), np.std(ft9, axis=1), skew(ft9, axis=1),
-                                                   np.max(ft9, axis=1), np.median(ft9, axis=1), np.min(ft9, axis=1)))
+    return X_pca
 
-                            print(ft1_trunc.shape)
-                            features = np.hstack((ft1_trunc, ft2_trunc, ft3_trunc, ft4_trunc,
-                                                  ft5_trunc, ft6_trunc, ft7_trunc, ft8_trunc, ft9_trunc))
-                            print(features.shape)
-                            # store only mfcc feature with expected number of vectors
-                            if len(ft1.T) == num_mfcc_vectors_per_segment:
-
-                                data["mfcc"].append(features.tolist())
-                                data["labels"].append(i - 1)
-                                print("{}, segment:{}".format(file_path, d + 1))
-                except:
-                    print("Passed this")
-
-    # save MFCCs to json file
-    with open(json_path, "w") as fp:
-        json.dump(data, fp, indent=4)
 
 
 if __name__ == "__main__":
-    save_mfcc(DATASET_PATH, JSON_PATH, num_segments=1)
+
+
+    X, y, data = load_data(DATA_PATH)
+
+    X_pca = processing_data(X, y, data)
+
+
+    X_train, X_test, y_train, y_test = train_test_split(X_pca, y, test_size=0.2)
+
+
+    model = keras.Sequential([
+
+
+        keras.layers.InputLayer(input_shape=(X_train.shape[1])),
+
+
+        keras.layers.Dense(256, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001)),
+        keras.layers.Dropout(0.4),
+
+
+        keras.layers.Dense(1024, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001)),
+        keras.layers.Dropout(0.2),
+
+
+        keras.layers.Dense(1024, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001)),
+        keras.layers.Dropout(0.5),
 
 
 
-    "best result is 0:4310"
+        keras.layers.Dense(512, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001)),
+        keras.layers.Dropout(0.2),
+
+        keras.layers.Dense(256, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001)),
+        keras.layers.Dropout(0.2),
+
+        keras.layers.Dense(8, activation='softmax')
+    ])
+
+    # compile model
+    optimiser = keras.optimizers.Adam(learning_rate=0.0001)
+    model.compile(optimizer=optimiser,
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+
+    model.summary()
+
+    # train model
+    history = model.fit(X_train, y_train, validation_data=(X_test, y_test), batch_size=32, epochs=2000)
+
+    # plot accuracy and error as a function of the epochs
+    plot_history(history)
