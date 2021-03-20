@@ -1,0 +1,55 @@
+import numpy as np
+from sklearn import svm
+import json
+from sklearn import metrics
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+DATA_PATH = r"Jsonfiles\all_mfcc_rasta_feature_set.json"
+
+def load_data(data_path):
+
+
+    with open(data_path, "r") as fp:
+        data = json.load(fp)
+
+    # convert lists to numpy arrays
+    X = np.array(data["mfcc"])
+    y = np.array(data["labels"])
+
+    print("Data succesfully loaded!")
+
+    return X, y, data
+
+
+if __name__ == "__main__":
+
+    X, y, data = load_data(DATA_PATH)
+    train_data = pd.DataFrame(data["mfcc"])
+    train_data["label"] = data["labels"]
+    X = train_data.drop(["label"], axis=1)
+    feature_names = list(X.columns)
+    X = X.values
+    labels = np.sort(np.unique(train_data.label.values))
+    num_class = len(labels)
+    c2i = {}
+    i2c = {}
+    for i, c in enumerate(labels):
+        c2i[c] = i
+        i2c[i] = c
+    y = np.array([c2i[x] for x in train_data.label.values])
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    pca = PCA(n_components=85).fit(X_scaled)
+    X_pca = pca.transform(X_scaled)
+    print(sum(pca.explained_variance_ratio_))
+
+    X_train, X_test, y_train, y_test = train_test_split(X_pca, y, test_size=0.3)
+    clf = svm.SVC(kernel="linear")
+    X_train = np.reshape(X_train, (1, X_train[1]))
+    clf.fit((X_train), y_train)
+    y_pred = clf.predict(X_test[1])
+    print("Acccuricy: ", metrics.accuracy_score(y_test, y_pred))
+    print("Precision:", metrics.precision_score(y_test, y_pred))
+    print("Recall:", metrics.recall_score(y_test, y_pred))
