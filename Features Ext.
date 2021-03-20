@@ -1,0 +1,124 @@
+import json
+import os
+import math
+import librosa
+import numpy as np
+from scipy.stats import skew
+from rasta import rastaplp
+
+
+DATASET_PATH = r"C:\Users\armag\Desktop\old and young"
+JSON_PATH = r"Jsonfiles\small_mfcc_rasta_feature_set_young_old.json"
+
+SAMPLE_RATE = 22050
+TRACK_DURATION = 2  # measured in seconds
+SAMPLES_PER_TRACK = SAMPLE_RATE * TRACK_DURATION
+
+
+def save_mfcc(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_length=512, num_segments=5):
+
+
+
+    # dictionary to store mapping, labels, and MFCCs
+    data = {
+        "mapping": [],
+        "labels": [],
+        "mfcc": []
+    }
+
+
+    samples_per_segment = int(SAMPLES_PER_TRACK / num_segments)
+    num_mfcc_vectors_per_segment = math.ceil(samples_per_segment / hop_length)
+
+    # loop through all genre sub-folder
+    for i, (dirpath, dirnames, filenames) in enumerate(os.walk(dataset_path)):
+
+        # ensure we're processing a genre sub-folder level
+        if dirpath is not dataset_path:
+
+            # save genre label (i.e., sub-folder name) in the mapping
+            semantic_label = dirpath.split("/")[-1]
+            data["mapping"].append(semantic_label)
+            print("\nProcessing: {}".format(semantic_label))
+
+            # process all audio files in genre sub-dir
+            for f in filenames:
+                try:
+
+                    # load audio file
+                    file_path = os.path.join(dirpath, f)
+                    signal, sample_rate = librosa.load(file_path, sr=SAMPLE_RATE)
+                    if len(signal) >= 22050:
+                        # process all segments of audio file
+                        for d in range(num_segments):
+
+                            # calculate start and finish sample for current segment
+                            start = samples_per_segment * d
+                            finish = start + samples_per_segment
+
+                            ft1 = librosa.feature.mfcc(signal[start:finish], sample_rate, n_mfcc=num_mfcc, n_fft=n_fft, hop_length=hop_length)
+                            ft2 = librosa.feature.zero_crossing_rate(signal[start:finish])[0]
+                            ft3 = librosa.feature.spectral_rolloff(signal[start:finish])[0]
+                            ft4 = librosa.feature.spectral_centroid(signal[start:finish])[0]
+                            ft5 = librosa.feature.spectral_contrast(signal[start:finish])[0]
+                            ft6 = librosa.feature.spectral_bandwidth(signal[start:finish])[0]
+                            ft7 = rastaplp(signal[start:finish])
+                            ft8 = librosa.feature.delta(ft1, order=1)
+                            ft9 = librosa.feature.delta(ft1, order=2)
+
+                            ft1_trunc = np.hstack((np.mean(ft1, axis=1), np.std(ft1, axis=1), skew(ft1, axis=1),
+                                                   np.max(ft1, axis=1), np.median(ft1, axis=1), np.min(ft1, axis=1)))
+                            print(ft1_trunc.shape)
+                            ft2_trunc = np.hstack(
+                                (np.mean(ft2), np.std(ft2), skew(ft2), np.max(ft2), np.median(ft2), np.min(ft2)))
+                            print(ft2_trunc.shape)
+                            ft3_trunc = np.hstack(
+                                (np.mean(ft3), np.std(ft3), skew(ft3), np.max(ft3), np.median(ft3), np.min(ft3)))
+                            print(ft3_trunc.shape)
+                            ft4_trunc = np.hstack(
+                                (np.mean(ft4), np.std(ft4), skew(ft4), np.max(ft4), np.median(ft4), np.min(ft4)))
+                            print(ft4_trunc.shape)
+
+                            ft5_trunc = np.hstack(
+                                (np.mean(ft5), np.std(ft5), skew(ft5), np.max(ft5), np.median(ft5), np.min(ft5)))
+                            print(ft5_trunc.shape)
+
+                            ft6_trunc = np.hstack(
+                                (np.mean(ft6), np.std(ft6), skew(ft6), np.max(ft6), np.median(ft6), np.max(ft6)))
+
+                            print(ft6_trunc.shape)
+
+                            ft7_trunc = np.hstack((np.mean(ft7, axis=1), np.std(ft7, axis=1), skew(ft7, axis=1),
+                                                   np.max(ft7, axis=1), np.median(ft7, axis=1), np.min(ft7, axis=1)))
+
+                            print(ft7_trunc.shape)
+                            ft8_trunc = np.hstack((np.mean(ft8, axis=1), np.std(ft8, axis=1), skew(ft8, axis=1),
+                                                   np.max(ft8, axis=1), np.median(ft8, axis=1), np.min(ft8, axis=1)))
+                            print(ft8_trunc.shape)
+                            ft9_trunc = np.hstack((np.mean(ft9, axis=1), np.std(ft9, axis=1), skew(ft9, axis=1),
+                                                   np.max(ft9, axis=1), np.median(ft9, axis=1), np.min(ft9, axis=1)))
+
+                            print(ft1_trunc.shape)
+                            features = np.hstack((ft1_trunc, ft2_trunc, ft3_trunc, ft4_trunc,
+                                                  ft5_trunc, ft6_trunc, ft7_trunc, ft8_trunc, ft9_trunc))
+                            print(features.shape)
+                            # store only mfcc feature with expected number of vectors
+                            if len(ft1.T) == num_mfcc_vectors_per_segment:
+
+                                data["mfcc"].append(features.tolist())
+                                data["labels"].append(i - 1)
+                                print("{}, segment:{}".format(file_path, d + 1))
+                except:
+                    print("Passed this")
+
+    # save MFCCs to json file
+    with open(json_path, "w") as fp:
+        json.dump(data, fp, indent=4)
+
+
+if __name__ == "__main__":
+    save_mfcc(DATASET_PATH, JSON_PATH, num_segments=1)
+
+
+
+    "best result is 0:4310"
