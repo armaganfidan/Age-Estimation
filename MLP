@@ -55,10 +55,7 @@ def plot_history(history):
 
 def processing_data(X, y, data):
 
-    train_data = pd.DataFrame(data["mfcc"])
-    train_data["label"] = data["labels"]
-
-    X = train_data.drop(["label"], axis=1)
+   
     X = X.values
 
     scaler = StandardScaler()
